@@ -72,7 +72,7 @@ layout = dbc.Container([
                          interval=2000,
                          n_intervals=0,
                          disabled=True),
-            html.H4('Serial Data Plotter'),
+            html.H2('Serial Data Plotter'),
             html.P('This tests plotting data from serial (arduino) using a background thread to collect the data and send it to a queue.  '
                    'Data is retrieved from the queue and stored in the browser as well as written to a file')
         ])
@@ -97,7 +97,7 @@ layout = dbc.Container([
                     id=f'{APP_ID}_header_dt',
                     columns=[
                         {"name": 'Position', "id": 'pos', "type": 'numeric', 'editable': False},
-                        {"name": 'Name', "id": 'name', "type": 'text'},
+                        {"name": 'Name', "id": 'name', "type": 'text', 'editable': False},
                         {"name": 'Format', "id": 'fmt', "type": 'text', "presentation": 'dropdown'}
                              ],
                     data=[{}],
@@ -148,11 +148,22 @@ layout = dbc.Container([
     ],
         className='mt-2 mb-2'
     ),
+    html.H2('Data Readouts'),
+    dcc.Dropdown(
+        id=f'{APP_ID}_readouts_dropdown',
+        multi=True,
+        options=[],
+        value=None
+    ),
+    dbc.CardDeck(
+        id=f'{APP_ID}_readouts_card_deck'
+    ),
+
+    html.H2('Data Plots'),
     html.Br(),
     dbc.ButtonGroup([
         dbc.Button("Add Figure / Readout", id=f'{APP_ID}_add_figure_button'),
     ]),
-    # todo add datatable for readouts
     # todo convert figure datatable to div with 2 select boxes (X, y (multi=true))
     dash_table.DataTable(
         id=f'{APP_ID}_figure_dt',
@@ -479,7 +490,7 @@ def add_dash(app):
 
         df_fig = pd.DataFrame(fig_dt_data).dropna(axis=0, how='any')
         if df_fig.empty:
-            return [dbc.Alert('Add plots & readouts y adding rows to the figure table', color='warning')]
+            return [dbc.Alert('Add plots & readouts by adding rows to the figure table', color='warning')]
 
 
         cards = []
@@ -509,6 +520,85 @@ def add_dash(app):
             )
             cards.append(card)
         return cards
+
+
+    @app.callback(
+        Output(f'{APP_ID}_readouts_dropdown', 'options'),
+        Input(f'{APP_ID}_header_dt', 'data')
+    )
+    def serial_data_readout_options(hdr_data):
+        if hdr_data is None:
+            raise PreventUpdate
+        df_hdr = pd.DataFrame(hdr_data).sort_values('pos')
+        df_hdr['name'] = df_hdr['name'].fillna(df_hdr['pos'].astype(str))
+        headers = df_hdr['name'].tolist()
+        options = [{'label': c, 'value': c} for c in headers]
+        return options
+
+    @app.callback(
+        Output(f'{APP_ID}_readouts_card_deck', 'children'),
+        Output(f'{APP_ID}_readouts_dropdown', 'value'),
+        Input(f'{APP_ID}_readouts_card_deck', 'children'),
+        Input(f'{APP_ID}_readouts_dropdown', 'value'),
+    )
+    def serial_data_create_readouts(cards, selected):
+        # circular callback
+        ctx = dash.callback_context
+        input_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        if input_id == f'{APP_ID}_readouts_card_deck':
+            # collect ids of toasts to updated selected items in dropdown
+            selected = []
+            for card in cards:
+                selected.append(card['id']['index'])
+        else:
+            # collect selected to create toasts
+            cards = []
+            for s in selected:
+                cards.append(
+                    dbc.Card(
+                        id={'type': f'{APP_ID}_readout_card', 'index': s},
+                        children=[
+                            dbc.CardHeader(s),
+                        ]
+                    )
+                )
+        return cards, selected
+
+
+
+    @app.callback(
+        Output({'type': f'{APP_ID}_readout_card', 'index': ALL}, 'children'),
+        Input(f'{APP_ID}_store', 'modified_timestamp'),
+        State(f'{APP_ID}_store', 'data'),
+        State(f'{APP_ID}_filename_input', 'value')
+    )
+    def serial_data_update_readouts(ts, data, filename):
+        if any([v is None for v in [ts, data]]):
+            raise PreventUpdate
+
+        conn = sqlite3.connect(FILE_DIR + filename)
+        cur = conn.cursor()
+        n_estimate = cur.execute("SELECT COUNT() FROM my_data").fetchone()[0]
+        n_int = n_estimate // 10000 + 1
+        query = f'SELECT * FROM my_data WHERE ROWID % {n_int} = 0'
+        df = pd.read_sql(query, conn)
+        conn.close()
+
+        card_chs = []
+        for ccb in dash.callback_context.outputs_list:
+            y = df[ccb['id']['index']].iloc[-1]
+            ch = [
+                dbc.CardHeader(ccb['id']['index']),
+                dbc.CardBody(
+                    dbc.ListGroup([
+                        dbc.ListGroupItem(html.H3(f"{y:0.3g}"), color='info'),
+                    ]),
+                )
+                ]
+            card_chs.append(ch)
+
+        return card_chs
+
 
 
     @app.callback(
