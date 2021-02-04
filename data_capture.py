@@ -542,7 +542,7 @@ def add_dash(app):
         Input(f'{APP_ID}_readouts_dropdown', 'value'),
     )
     def serial_data_create_readouts(cards, selected):
-        # circular callback
+
         ctx = dash.callback_context
         input_id = ctx.triggered[0]["prop_id"].split(".")[0]
         if input_id == f'{APP_ID}_readouts_card_deck':
@@ -553,15 +553,16 @@ def add_dash(app):
         else:
             # collect selected to create toasts
             cards = []
-            for s in selected:
-                cards.append(
-                    dbc.Card(
-                        id={'type': f'{APP_ID}_readout_card', 'index': s},
-                        children=[
-                            dbc.CardHeader(s),
-                        ]
+            if selected is not None:
+                for s in selected:
+                    cards.append(
+                        dbc.Card(
+                            id={'type': f'{APP_ID}_readout_card', 'index': s},
+                            children=[
+                                dbc.CardHeader(s),
+                            ]
+                        )
                     )
-                )
         return cards, selected
 
 
