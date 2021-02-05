@@ -100,7 +100,7 @@ layout = dbc.Container([
                         {"name": 'Name', "id": 'name', "type": 'text', 'editable': False},
                         {"name": 'Format', "id": 'fmt', "type": 'text', "presentation": 'dropdown'}
                              ],
-                    data=[{}],
+                    data=None,
                     editable=True,
                     row_deletable=False,
                     dropdown={
@@ -159,51 +159,32 @@ layout = dbc.Container([
         id=f'{APP_ID}_readouts_card_deck'
     ),
 
-    html.H2('Data Plots'),
-    html.Br(),
+    html.H2('Data Plots', className='mt-2 mb-1'),
     dbc.ButtonGroup([
+        dbc.Button("Hide / Show Plot Definition", id=f'{APP_ID}_plot_dt_collapse_button'),
         dbc.Button("Add Figure / Readout", id=f'{APP_ID}_add_figure_button'),
     ]),
-    # todo convert figure datatable to div with 2 select boxes (X, y (multi=true))
-    dash_table.DataTable(
-        id=f'{APP_ID}_figure_dt',
-        columns=[
-            {"name": 'Name', "id": 'name', 'type': 'text'},
-            {"name": 'X data', "id": 'x_data', 'type': 'text', 'presentation': 'dropdown'},
-            {"name": 'Y data', "id": 'y_data', 'type': 'text', 'presentation': 'dropdown'},
-            {"name": 'Width (px)', "id": 'width', 'type': 'numeric'},
-        ],
-        data=[{}],
-        row_deletable=True,
-        editable=True,
+    dbc.Collapse(
+        id=f'{APP_ID}_plot_dt_collapse',
+        children=[
+            dash_table.DataTable(
+                id=f'{APP_ID}_figure_dt',
+                columns=[
+                    {"name": 'Name', "id": 'name', 'type': 'text'},
+                    {"name": 'X data', "id": 'x_data', 'type': 'text', 'presentation': 'dropdown'},
+                    {"name": 'Y data', "id": 'y_data', 'type': 'text', 'presentation': 'dropdown'},
+                    {"name": 'Width (px)', "id": 'width', 'type': 'numeric'},
+                ],
+                data=[],
+                row_deletable=True,
+                editable=True,
+            ),
+        ]
     ),
-    dbc.Row([
-        dbc.Col(
-            dbc.FormGroup([
-                dbc.Label('X axis'),
-                dcc.Dropdown(id=f'{APP_ID}_x_dropdown',
-                             placeholder='Select X axis',
-                             options=[],
-                             multi=False),
-            ]),
-            width=4
-        ),
-        dbc.Col(
-            dbc.FormGroup([
-                dbc.Label('Y axis'),
-                dcc.Dropdown(id=f'{APP_ID}_y_dropdown',
-                             placeholder='Select Y axis',
-                             options=[],
-                             multi=True),
-            ]),
-            width=4
-        ),
-    ]),
+    # todo convert figure datatable to div with 2 select boxes (X, y (multi=true))
 
-    dbc.CardGroup(
-    id=f'{APP_ID}_fig_card_group'),
-    dbc.Row(
-        dbc.Col(id=f'{APP_ID}_current_div'),
+    html.Div(
+        id=f'{APP_ID}_figure_div'
     ),
 ])
 
@@ -233,14 +214,24 @@ def add_dash(app):
             while split_line[0] != '{':
                 line = ser_obj.readline()
                 split_line = line.strip().decode("utf-8")
-                print(split_line)
 
             split_line = line.strip().decode("utf-8")
             jdic = json.loads(split_line)
             data = [{'pos': i, 'name': k} for i, k in enumerate(jdic.keys())]
+            for i, k in enumerate(jdic.keys()):
+
+                t = type(jdic[k])
+                if t is int:
+                    data[i].update({'fmt': 'integer'})
+                if t is float:
+                    data[i].update({'fmt': 'real'})
+                else:
+                    data[i].update({'fmt': 'text'})
+
             ser_obj.close()
             return data, '', False
         except Exception as e:
+
             return [{}], html.P(str(e)), True
         return data, '', False
 
@@ -269,89 +260,118 @@ def add_dash(app):
         return descs[idx]
 
     @app.callback(
-        [
-            Output(f'{APP_ID}_figure_dt', 'data'),
-            Output(f'{APP_ID}_figure_dt', 'dropdown'),
-        ],
-        [
-            Input(f'{APP_ID}_add_figure_button', 'n_clicks'),
-            Input(f'{APP_ID}_header_dt', 'data'),
-        ],
-        [
-            State(f'{APP_ID}_figure_dt', 'data')
-        ]
+        Output(f'{APP_ID}_plot_dt_collapse', "is_open"),
+        Input(f'{APP_ID}_plot_dt_collapse_button', "n_clicks"),
+        State(f'{APP_ID}_plot_dt_collapse', "is_open"),
     )
-    def serial_data_figure_dt(n_clicks, header_data, data):
+    def serial_data_plot_collapse(n, is_open):
+        if n:
+            return not is_open
+        return is_open
+
+    @app.callback(
+        Output(f'{APP_ID}_figure_dt', 'data'),
+        Output(f'{APP_ID}_figure_dt', 'dropdown'),
+        Output(f'{APP_ID}_figure_div', 'children'),
+        Input(f'{APP_ID}_add_figure_button', 'n_clicks'),
+        Input(f'{APP_ID}_header_dt', 'data'),
+        Input(f'{APP_ID}_figure_dt', 'data'),
+        State(f'{APP_ID}_figure_div', 'children')
+    )
+    def serial_data_figure_dt(n_clicks, header_data, data, figures):
+        # circular callback
+
         ctx = dash.callback_context
         if not ctx.triggered or header_data is None:
             raise PreventUpdate
 
+        if figures is None:
+            figures = []
+
         df_header = pd.DataFrame(header_data)
         df_header = df_header.dropna(axis=0, how='any')
         if df_header.empty:
-            return [{}], {}
+            return [{}], {}, []
+
+        dropdown = {
+            'x_data': {
+                'options':
+                    [{'label': 'index', 'value': 'index'}] +
+                    [
+                        {'label': name, 'value': name} for name in df_header['name']
+                    ],
+            },
+            'y_data': {
+                'options':
+                    [{'label': 'index', 'value': 'index'}] +
+                    [
+                        {'label': name, 'value': name} for name in df_header['name']
+                    ],
+            },
+        }
 
         # add row (button press)
+        # todo force index to be unique
         if ctx.triggered[0]['prop_id'].split('.')[0] == f'{APP_ID}_add_figure_button':
 
+            if len(data) > 0:
+                nxt = [n for n in range(1, len(data) + 2) if n not in [int(d['name']) for d in data]][0]
+            else:
+                nxt = 1
             data.append(
                 {
-                    'name': f'{len(data) + 1:d}',
+                    'name': f'{nxt:d}',
                     'x_data': 'index',
                     'y_data': df_header['name'].values[-1],
                     'width': 400
                  }
             )
-            dropdown = {
-                'x_data': {
-                    'options':
-                        [{'label': 'index', 'value': 'index'}] +
-                        [
-                            {'label': name, 'value': name} for name in df_header['name']
-                        ],
-                },
-                'y_data': {
-                    'options':
-                        [{'label': 'index', 'value': 'index'}] +
-                        [
-                            {'label': name, 'value': name} for name in df_header['name']
-                        ],
-                },
-            }
 
-            return data, dropdown
+            fig = go.Figure()
+            fig.update_layout(title=data[-1]['name'])
+            fig.update_xaxes(title=data[-1]['x_data'])
+            fig.update_yaxes(title=data[-1]['y_data'])
+            ch = dcc.Graph(
+                id={'type': f'{APP_ID}_plot_graph', 'index': data[-1]['name']},
+                figure=fig
+            )
+            figures.append(ch)
+
+            return data, dropdown, figures
 
         # header data changed
         if ctx.triggered[0]['prop_id'].split('.')[0] == f'{APP_ID}_header_dt':
-            data = [
-                {
-                    'name': f'{i + 1:d}',
-                    'x_data': 'index',
-                    'y_data': name,
-                    'width': 400
-                }
-                for i, name in enumerate(df_header['name'])
-            ]
+            if data is None:
+                data.append({'name': 1, 'x_data': 'index', 'y_data': df_header['name'].values[-1]})
+            elif len(data) == 0:
+                data.append({'name': 1, 'x_data': 'index', 'y_data': df_header['name'].values[-1]})
 
-            dropdown = {
-                'x_data': {
-                    'options':
-                        [{'label': 'index', 'value': 'index'}] +
-                        [
-                            {'label': name, 'value': name} for name in df_header['name']
-                        ],
-                },
-                'y_data': {
-                    'options':
-                        [{'label': 'index', 'value': 'index'}] +
-                        [
-                            {'label': name, 'value': name} for name in df_header['name']
-                        ],
-                },
-            }
+            return data, dropdown, figures
 
-            return data, dropdown
-    # todo use pattern matching callbacks to create multiple graph objects &
+        # figure_dt data changed
+        # todo force index to be unique
+        if ctx.triggered[0]['prop_id'].split('.')[0] == f'{APP_ID}_figure_dt':
+
+            # loop through data and create figures
+            figures = []
+            for i, d in enumerate(data):
+                if 'name' not in d.keys():
+                    d['name'] = f'{i}'
+                if 'x_data' not in d.keys():
+                    d['x_data'] = 'index'
+                if 'y_data' not in d.keys():
+                    d['y_data'] = df_header['name'].values[-1]
+
+                fig = go.Figure()
+                fig.update_layout(title=d['name'])
+                fig.update_xaxes(title=d['x_data'])
+                fig.update_yaxes(title=d['y_data'])
+                ch = dcc.Graph(
+                    id={'type': f'{APP_ID}_figures', 'index': d['name']},
+                    figure=fig
+                )
+                figures.append(ch)
+            return data, dropdown, figures
 
 
     @app.callback(
@@ -367,8 +387,6 @@ def add_dash(app):
             Output(f'{APP_ID}_filename_input', 'value'),
             Output(f'{APP_ID}_header_dt', 'editable'),
             Output(f'{APP_ID}_store', 'clear_data'),
-            Output(f'{APP_ID}_x_dropdown', 'options'),
-            Output(f'{APP_ID}_y_dropdown', 'options'),
          ],
         [
             Input(f'{APP_ID}_start_button', 'n_clicks'),
@@ -389,18 +407,19 @@ def add_dash(app):
         ctx = dash.callback_context
         if any([n_start is None, n_stop is None, port is None, hdr_data is None, n_clear is None]):
             raise PreventUpdate
+        if pd.DataFrame(hdr_data).empty:
+            raise PreventUpdate
 
         df_hdr = pd.DataFrame(data_header).sort_values('pos')
         df_hdr['name'] = df_hdr['name'].fillna(df_hdr['pos'].astype(str))
         headers = df_hdr['name'].tolist()
-        options = [{'label': c, 'value': c} for c in headers]
 
         trig = ctx.triggered[0]['prop_id'].split('.')[0]
         if trig == f'{APP_ID}_header_dt':
             if len(data_header[0].keys()) == 3 and ~df_hdr.isnull().values.any():
-                return True, False, 'success', True, 'secondary', True, 'secondary', False, filename, True, False, options, options
+                return True, False, 'success', True, 'secondary', True, 'secondary', False, filename, True, False
             else:
-                return True, True, 'secondary', True, 'secondary', True, 'secondary', False, filename, True, False, options, options
+                return True, True, 'secondary', True, 'secondary', True, 'secondary', False, filename, True, False
 
 
         if trig == f'{APP_ID}_start_button':
@@ -413,19 +432,19 @@ def add_dash(app):
                 clear = True
             SERIAL_THREAD = SerialThread(port, baud=115200)
             SERIAL_THREAD.start()
-            return False, True, 'secondary', False, 'danger', True, 'secondary', True, filename, False, clear, options, options
+            return False, True, 'secondary', False, 'danger', True, 'secondary', True, filename, False, clear
 
         if trig == f'{APP_ID}_stop_button':
             print('stopping')
             SERIAL_THREAD.stop()
             with Q.mutex:
                 Q.queue.clear()
-            return True, False, 'success', True, 'secondary', False, 'warning', False, filename, True, False, options, options
+            return True, False, 'success', True, 'secondary', False, 'warning', False, filename, True, False
 
         if trig == f'{APP_ID}_clear_button':
             print('clearing')
             filename = f'data/my_data_{datetime.now().strftime("%m.%d.%Y.%H.%M.%S")}.db'
-            return True, False, 'success', True, 'secondary', True, 'secondary', False, filename, True, True, options, options
+            return True, False, 'success', True, 'secondary', True, 'secondary', False, filename, True, True
 
 
     @app.callback(
@@ -469,66 +488,15 @@ def add_dash(app):
 
 
     @app.callback(
-        Output(f'{APP_ID}_fig_card_group', 'children'),
-        [
-            Input(f'{APP_ID}_figure_dt', 'data'),
-            Input(f'{APP_ID}_store', 'data'),
-         ],
-        [
-            State(f'{APP_ID}_filename_input', 'value'),
-            State(f'{APP_ID}_fig_card_group', 'children')
-         ]
-    )
-    def serial_data_create_figures(fig_dt_data, last_row_id, filename, cards):
-        ctx = dash.callback_context
-        if any([v is None for v in [fig_dt_data, filename, last_row_id]]):
-            raise PreventUpdate
-        trig = ctx.triggered[0]['prop_id'].split('.')[0]
-
-        if trig == f'{APP_ID}_store' and cards is not None:
-            raise PreventUpdate
-
-        df_fig = pd.DataFrame(fig_dt_data).dropna(axis=0, how='any')
-        if df_fig.empty:
-            return [dbc.Alert('Add plots & readouts by adding rows to the figure table', color='warning')]
-
-
-        cards = []
-        for p in df_fig.itertuples():
-            w = p.width
-
-            card = dbc.Card([
-                dbc.CardHeader(f"{p.name}"),
-                dbc.CardBody([
-                    html.H4(
-                        id={
-                            'type': f'{APP_ID}_card_hdr',
-                            'index': p.name
-                        },
-                        className="card-title"
-                    ),
-                    dcc.Graph(
-                        id={
-                            'type': f'{APP_ID}_card_graph',
-                            'index': p.name
-                        },
-                    )
-                ])
-
-            ],
-                style={"max-width": f"{w}px", "min-width": f"{w}px"}
-            )
-            cards.append(card)
-        return cards
-
-
-    @app.callback(
         Output(f'{APP_ID}_readouts_dropdown', 'options'),
         Input(f'{APP_ID}_header_dt', 'data')
     )
     def serial_data_readout_options(hdr_data):
         if hdr_data is None:
             raise PreventUpdate
+        if pd.DataFrame(hdr_data).empty:
+            raise PreventUpdate
+        print(hdr_data)
         df_hdr = pd.DataFrame(hdr_data).sort_values('pos')
         df_hdr['name'] = df_hdr['name'].fillna(df_hdr['pos'].astype(str))
         headers = df_hdr['name'].tolist()
@@ -569,11 +537,13 @@ def add_dash(app):
 
     @app.callback(
         Output({'type': f'{APP_ID}_readout_card', 'index': ALL}, 'children'),
+        Output({'type': f'{APP_ID}_figures', 'index': ALL}, 'figure'),
         Input(f'{APP_ID}_store', 'modified_timestamp'),
         State(f'{APP_ID}_store', 'data'),
-        State(f'{APP_ID}_filename_input', 'value')
+        State(f'{APP_ID}_filename_input', 'value'),
+        State(f'{APP_ID}_figure_dt', 'data')
     )
-    def serial_data_update_readouts(ts, data, filename):
+    def serial_data_update_readouts(ts, data, filename, fig_dt_data):
         if any([v is None for v in [ts, data]]):
             raise PreventUpdate
 
@@ -586,7 +556,7 @@ def add_dash(app):
         conn.close()
 
         card_chs = []
-        for ccb in dash.callback_context.outputs_list:
+        for ccb in dash.callback_context.outputs_list[0]:
             y = df[ccb['id']['index']].iloc[-1]
             ch = [
                 dbc.CardHeader(ccb['id']['index']),
@@ -598,84 +568,36 @@ def add_dash(app):
                 ]
             card_chs.append(ch)
 
-        return card_chs
-
-
-
-    @app.callback(
-        [
-            Output({'type': f'{APP_ID}_card_graph', 'index': ALL}, 'figure'),
-            Output({'type': f'{APP_ID}_card_hdr', 'index': ALL}, 'children'),
-        ],
-        [
-            Input(f'{APP_ID}_store', 'modified_timestamp'),
-         ],
-        [
-            State(f'{APP_ID}_store', 'data'),
-            State(f'{APP_ID}_filename_input', 'value'),
-            State(f'{APP_ID}_figure_dt', 'data'),
-         ]
-    )
-    def serial_data_extend_figures(ts, data, filename, fig_dt_data):
-        if any([v is None for v in [ts, data]]):
-            raise PreventUpdate
-
-        conn = sqlite3.connect(FILE_DIR + filename)
-        cur = conn.cursor()
-        n_estimate = cur.execute("SELECT COUNT() FROM my_data").fetchone()[0]
-        n_int = n_estimate // 10000 + 1
-        query = f'SELECT * FROM my_data WHERE ROWID % {n_int} = 0'
-        df = pd.read_sql(query, conn)
-        conn.close()
-
         df_fig = pd.DataFrame(fig_dt_data).dropna(axis=0, how='any')
-
         figs = []
-        hdrs = []
-        for fcb, hcb in zip(dash.callback_context.outputs_list[0], dash.callback_context.outputs_list[1]):
-            if hcb['id']['index'] != fcb['id']['index']:
-                print('not equal!', f'hcb: {hcb["id"]}, {fcb["id"]}')
-            s_fig = df_fig.loc[df_fig['name'].astype(str) == fcb['id']['index']].iloc[0, :]
-            x_data = s_fig['x_data']
-            y_data = s_fig['y_data']
-            if x_data == 'index':
-                x = df.index
-            else:
-                x = df[x_data]
-            if y_data == 'index':
-                y = df.index
-            else:
-                y = df[y_data]
+        if not df_fig.empty:
+            for fcb in dash.callback_context.outputs_list[1]:
+                s_fig = df_fig.loc[df_fig['name'].astype(str) == fcb['id']['index']].iloc[0, :]
+                x_data = s_fig['x_data']
+                y_data = s_fig['y_data']
+                if x_data == 'index':
+                    x = df.index
+                else:
+                    x = df[x_data]
+                if y_data == 'index':
+                    y = df.index
+                else:
+                    y = df[y_data]
 
-            fig = go.Figure()
-            fig.update_xaxes(title=x_data)
-            fig.update_yaxes(title=y_data)
-            fig.update_layout(margin={'l': 20, 'r': 20, 't': 0, 'b': 20})
-            fig.add_trace(
-                go.Scatter(
-                    x=x,
-                    y=y,
-                    showlegend=False
+                fig = go.Figure()
+                fig.update_xaxes(title=x_data)
+                fig.update_yaxes(title=y_data)
+                fig.update_layout(margin={'l': 20, 'r': 20, 't': 0, 'b': 20})
+                fig.add_trace(
+                    go.Scatter(
+                        x=x,
+                        y=y,
+                        showlegend=False
+                    )
                 )
-            )
-            figs.append(fig)
-            # hdr = dbc.Alert(
-            #     [html.H3(f"X, {x_data}: {x.values[-1]:0.3f}"), html.H3(f"Y, {y_data}: {y.values[-1]:0.3f}")],
-            #     color='primary'
-            # )
-            hdr = [
-                dbc.ListGroup([
-                    dbc.ListGroupItem(html.H3(f"{x_data}")),
-                    dbc.ListGroupItem(html.H3(f"{x.values[-1]:0.3g}"), color='info'),
-                ]),
-                dbc.ListGroup([
-                    dbc.ListGroupItem(html.H3(f"{y_data}")),
-                    dbc.ListGroupItem(html.H3(f"{y.values[-1]:0.3g}"), color='info'),
-                ]),
-            ]
-            hdrs.append(hdr)
+                figs.append(fig)
 
-        return figs, hdrs
+        return card_chs, figs
 
     return app
 
