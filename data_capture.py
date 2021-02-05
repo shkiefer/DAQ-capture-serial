@@ -161,28 +161,9 @@ layout = dbc.Container([
 
     html.H2('Data Plots', className='mt-2 mb-1'),
     dbc.ButtonGroup([
-        dbc.Button("Hide / Show Plot Definition", id=f'{APP_ID}_plot_dt_collapse_button'),
-        dbc.Button("Add Figure / Readout", id=f'{APP_ID}_add_figure_button'),
+        dbc.Button("Add Plot", id=f'{APP_ID}_add_figure_button'),
+        dbc.Button("Remove Plot", id=f'{APP_ID}_remove_figure_button'),
     ]),
-    dbc.Collapse(
-        id=f'{APP_ID}_plot_dt_collapse',
-        children=[
-            dash_table.DataTable(
-                id=f'{APP_ID}_figure_dt',
-                columns=[
-                    {"name": 'Name', "id": 'name', 'type': 'text'},
-                    {"name": 'X data', "id": 'x_data', 'type': 'text', 'presentation': 'dropdown'},
-                    {"name": 'Y data', "id": 'y_data', 'type': 'text', 'presentation': 'dropdown'},
-                    {"name": 'Width (px)', "id": 'width', 'type': 'numeric'},
-                ],
-                data=[],
-                row_deletable=True,
-                editable=True,
-            ),
-        ]
-    ),
-    # todo convert figure datatable to div with 2 select boxes (X, y (multi=true))
-
     html.Div(
         id=f'{APP_ID}_figure_div'
     ),
@@ -258,120 +239,6 @@ def add_dash(app):
         idx = ports.index(com)
         descs = [comport.description for comport in serial.tools.list_ports.comports()]
         return descs[idx]
-
-    @app.callback(
-        Output(f'{APP_ID}_plot_dt_collapse', "is_open"),
-        Input(f'{APP_ID}_plot_dt_collapse_button', "n_clicks"),
-        State(f'{APP_ID}_plot_dt_collapse', "is_open"),
-    )
-    def serial_data_plot_collapse(n, is_open):
-        if n:
-            return not is_open
-        return is_open
-
-    @app.callback(
-        Output(f'{APP_ID}_figure_dt', 'data'),
-        Output(f'{APP_ID}_figure_dt', 'dropdown'),
-        Output(f'{APP_ID}_figure_div', 'children'),
-        Input(f'{APP_ID}_add_figure_button', 'n_clicks'),
-        Input(f'{APP_ID}_header_dt', 'data'),
-        Input(f'{APP_ID}_figure_dt', 'data'),
-        State(f'{APP_ID}_figure_div', 'children')
-    )
-    def serial_data_figure_dt(n_clicks, header_data, data, figures):
-        # circular callback
-
-        ctx = dash.callback_context
-        if not ctx.triggered or header_data is None:
-            raise PreventUpdate
-
-        if figures is None:
-            figures = []
-
-        df_header = pd.DataFrame(header_data)
-        df_header = df_header.dropna(axis=0, how='any')
-        if df_header.empty:
-            return [{}], {}, []
-
-        dropdown = {
-            'x_data': {
-                'options':
-                    [{'label': 'index', 'value': 'index'}] +
-                    [
-                        {'label': name, 'value': name} for name in df_header['name']
-                    ],
-            },
-            'y_data': {
-                'options':
-                    [{'label': 'index', 'value': 'index'}] +
-                    [
-                        {'label': name, 'value': name} for name in df_header['name']
-                    ],
-            },
-        }
-
-        # add row (button press)
-        # todo force index to be unique
-        if ctx.triggered[0]['prop_id'].split('.')[0] == f'{APP_ID}_add_figure_button':
-
-            if len(data) > 0:
-                nxt = [n for n in range(1, len(data) + 2) if n not in [int(d['name']) for d in data]][0]
-            else:
-                nxt = 1
-            data.append(
-                {
-                    'name': f'{nxt:d}',
-                    'x_data': 'index',
-                    'y_data': df_header['name'].values[-1],
-                    'width': 400
-                 }
-            )
-
-            fig = go.Figure()
-            fig.update_layout(title=data[-1]['name'])
-            fig.update_xaxes(title=data[-1]['x_data'])
-            fig.update_yaxes(title=data[-1]['y_data'])
-            ch = dcc.Graph(
-                id={'type': f'{APP_ID}_plot_graph', 'index': data[-1]['name']},
-                figure=fig
-            )
-            figures.append(ch)
-
-            return data, dropdown, figures
-
-        # header data changed
-        if ctx.triggered[0]['prop_id'].split('.')[0] == f'{APP_ID}_header_dt':
-            if data is None:
-                data.append({'name': 1, 'x_data': 'index', 'y_data': df_header['name'].values[-1]})
-            elif len(data) == 0:
-                data.append({'name': 1, 'x_data': 'index', 'y_data': df_header['name'].values[-1]})
-
-            return data, dropdown, figures
-
-        # figure_dt data changed
-        # todo force index to be unique
-        if ctx.triggered[0]['prop_id'].split('.')[0] == f'{APP_ID}_figure_dt':
-
-            # loop through data and create figures
-            figures = []
-            for i, d in enumerate(data):
-                if 'name' not in d.keys():
-                    d['name'] = f'{i}'
-                if 'x_data' not in d.keys():
-                    d['x_data'] = 'index'
-                if 'y_data' not in d.keys():
-                    d['y_data'] = df_header['name'].values[-1]
-
-                fig = go.Figure()
-                fig.update_layout(title=d['name'])
-                fig.update_xaxes(title=d['x_data'])
-                fig.update_yaxes(title=d['y_data'])
-                ch = dcc.Graph(
-                    id={'type': f'{APP_ID}_figures', 'index': d['name']},
-                    figure=fig
-                )
-                figures.append(ch)
-            return data, dropdown, figures
 
 
     @app.callback(
@@ -496,12 +363,12 @@ def add_dash(app):
             raise PreventUpdate
         if pd.DataFrame(hdr_data).empty:
             raise PreventUpdate
-        print(hdr_data)
         df_hdr = pd.DataFrame(hdr_data).sort_values('pos')
         df_hdr['name'] = df_hdr['name'].fillna(df_hdr['pos'].astype(str))
         headers = df_hdr['name'].tolist()
         options = [{'label': c, 'value': c} for c in headers]
         return options
+
 
     @app.callback(
         Output(f'{APP_ID}_readouts_card_deck', 'children'),
@@ -514,12 +381,12 @@ def add_dash(app):
         ctx = dash.callback_context
         input_id = ctx.triggered[0]["prop_id"].split(".")[0]
         if input_id == f'{APP_ID}_readouts_card_deck':
-            # collect ids of toasts to updated selected items in dropdown
+            # do we actually get here?
             selected = []
             for card in cards:
                 selected.append(card['id']['index'])
         else:
-            # collect selected to create toasts
+            # collect selected to create cards
             cards = []
             if selected is not None:
                 for s in selected:
@@ -534,17 +401,13 @@ def add_dash(app):
         return cards, selected
 
 
-
     @app.callback(
         Output({'type': f'{APP_ID}_readout_card', 'index': ALL}, 'children'),
-        Output({'type': f'{APP_ID}_figures', 'index': ALL}, 'figure'),
         Input(f'{APP_ID}_store', 'modified_timestamp'),
-        State(f'{APP_ID}_store', 'data'),
         State(f'{APP_ID}_filename_input', 'value'),
-        State(f'{APP_ID}_figure_dt', 'data')
     )
-    def serial_data_update_readouts(ts, data, filename, fig_dt_data):
-        if any([v is None for v in [ts, data]]):
+    def serial_data_update_readouts(ts, filename):
+        if any([v is None for v in [ts]]):
             raise PreventUpdate
 
         conn = sqlite3.connect(FILE_DIR + filename)
@@ -556,7 +419,7 @@ def add_dash(app):
         conn.close()
 
         card_chs = []
-        for ccb in dash.callback_context.outputs_list[0]:
+        for ccb in dash.callback_context.outputs_list:
             y = df[ccb['id']['index']].iloc[-1]
             ch = [
                 dbc.CardHeader(ccb['id']['index']),
@@ -568,36 +431,126 @@ def add_dash(app):
                 ]
             card_chs.append(ch)
 
-        df_fig = pd.DataFrame(fig_dt_data).dropna(axis=0, how='any')
-        figs = []
-        if not df_fig.empty:
-            for fcb in dash.callback_context.outputs_list[1]:
-                s_fig = df_fig.loc[df_fig['name'].astype(str) == fcb['id']['index']].iloc[0, :]
-                x_data = s_fig['x_data']
-                y_data = s_fig['y_data']
-                if x_data == 'index':
-                    x = df.index
-                else:
-                    x = df[x_data]
-                if y_data == 'index':
-                    y = df.index
-                else:
-                    y = df[y_data]
+        return card_chs
 
-                fig = go.Figure()
-                fig.update_xaxes(title=x_data)
-                fig.update_yaxes(title=y_data)
-                fig.update_layout(margin={'l': 20, 'r': 20, 't': 0, 'b': 20})
-                fig.add_trace(
-                    go.Scatter(
-                        x=x,
-                        y=y,
-                        showlegend=False
+    @app.callback(
+        Output(f'{APP_ID}_figure_div', 'children'),
+        Input(f'{APP_ID}_add_figure_button', 'n_clicks'),
+        Input(f'{APP_ID}_remove_figure_button', 'n_clicks'),
+        Input(f'{APP_ID}_header_dt', 'data'),
+        State(f'{APP_ID}_figure_div', 'children'),
+    )
+    def serial_data_create_figures(n_add, n_remove, header_data, figure_objs):
+
+        ctx = dash.callback_context
+        input_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+        df_header = pd.DataFrame(header_data)
+        df_header = df_header.dropna(axis=0, how='any')
+        if df_header.empty:
+            return [html.Div(
+                [
+                    dbc.Row(),
+                    dbc.Row(
+                        dbc.Col(
+                            dbc.Alert('Configure Header Data', color='warning')
+                        )
                     )
-                )
-                figs.append(fig)
+                ]
+            )]
 
-        return card_chs, figs
+        # add figure
+        if input_id == f'{APP_ID}_add_figure_button':
+            if figure_objs is None or len(figure_objs) < 1:
+                figure_objs = []
+            else:
+                figure_objs = [fobj for fobj in figure_objs if f'{APP_ID}_plot_graph' in str(fobj)]
+            fig_div = html.Div([
+               dbc.Row([
+                   dbc.Col(
+                       dbc.FormGroup([
+                           dbc.Label(html.H4('X axis data')),
+                           dcc.Dropdown(
+                               id={'type': f'{APP_ID}_plot_x_data', 'index': n_add},
+                               value=None,
+                               options=
+                               [{'label': 'index', 'value': 'index'}] +
+                               [{'label': name, 'value': name} for name in df_header['name']],
+                               multi=False
+                           )
+                       ]),
+                       width=3
+                   ),
+                   dbc.Col(
+                       dbc.FormGroup([
+                           dbc.Label(html.H4('Y axis data')),
+                           dcc.Dropdown(
+                               id={'type': f'{APP_ID}_plot_y_data', 'index': n_add},
+                               value=None,
+                               options=[{'label': name, 'value': name} for name in df_header['name']],
+                               multi=True
+                           )
+                       ]),
+                       width=8
+                   ),
+               ],
+                   className='mt-3'
+               ),
+               dbc.Row(
+                   dbc.Col(
+                       dcc.Graph(id={'type': f'{APP_ID}_plot_graph', 'index': n_add})
+                   ),
+                   className='mt-2'
+               )
+            ])
+            figure_objs.append(fig_div)
+            return figure_objs
+
+        # remove last figure object
+        if input_id == f'{APP_ID}_remove_figure_button':
+            if figure_objs is None:
+                figure_objs = []
+            else:
+                figure_objs = [fobj for fobj in figure_objs if 'Graph' in str(type(fobj['props']['children']['props']['children']['props']['children']))]
+            return figure_objs[:-1]
+
+    @app.callback(
+        Output({'type': f'{APP_ID}_plot_graph', 'index': MATCH}, 'figure'),
+        Input(f'{APP_ID}_store', 'modified_timestamp'),
+        Input({'type': f'{APP_ID}_plot_x_data', 'index': MATCH}, 'value'),
+        Input({'type': f'{APP_ID}_plot_y_data', 'index': MATCH}, 'value'),
+        State(f'{APP_ID}_filename_input', 'value'),
+    )
+    def serial_data_update_figures(ts, x_data, y_data, filename):
+        if any([v is None for v in [ts, x_data, y_data]]):
+            raise PreventUpdate
+
+        conn = sqlite3.connect(FILE_DIR + filename)
+        cur = conn.cursor()
+        n_estimate = cur.execute("SELECT COUNT() FROM my_data").fetchone()[0]
+        n_int = n_estimate // 10000 + 1
+        query = f'SELECT * FROM my_data WHERE ROWID % {n_int} = 0'
+        df = pd.read_sql(query, conn)
+        conn.close()
+
+        if x_data == 'index':
+            x = df.index
+        else:
+            x = df[x_data]
+        fig = go.Figure()
+        fig.update_layout(
+            margin=dict(l=20, r=20, t=10, b=10),
+        )
+        for y_c in y_data:
+            fig.add_trace(
+                go.Scatter(
+                    x=x,
+                    y=df[y_c],
+                    name=y_c
+                )
+            )
+
+        return fig
 
     return app
 
