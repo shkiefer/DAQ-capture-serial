@@ -39,6 +39,8 @@ data lines example:
 's01_tempHJ_C' is the hot junction temperature for device 1   
 's01_tempCJ_C' is the cold junction temperature for device 1  
 
+In the example, I pinched the 2 hot junction ends and the temperature rose.
+
 ![](https://github.com/ohDAQ/public_gifs/blob/main/public_gifs/ohDAQ_usage.gif)
 
 
