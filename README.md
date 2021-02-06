@@ -36,8 +36,8 @@ data lines example:
 {"s01_time_ms": 4143005, "s01_tempHJ_C": 1.993750e+01, "s01_tempCJ_C": 2.025000e+01, "s02_time_ms": 4143007, "s02_tempHJ_C": 1.912500e+01, "s02_tempCJ_C": 2.000000e+01}
 ```
 
-'s01_tempHJ_C' is the hot junction temperature for device 1 
-'s01_tempCJ_C' is the cold junction temperature for device 1
+'s01_tempHJ_C' is the hot junction temperature for device 1   
+'s01_tempCJ_C' is the cold junction temperature for device 1  
 
 
 
