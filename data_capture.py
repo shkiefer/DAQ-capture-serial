@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 
 import dash
@@ -8,8 +7,6 @@ import dash_html_components as html
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import dash_table
-import dash_table.FormatTemplate as FormatTemplate
-from dash_table.Format import Format, Scheme, Sign, Symbol
 
 import plotly.graph_objs as go
 
@@ -199,12 +196,11 @@ def add_dash(app):
             split_line = line.strip().decode("utf-8")
             jdic = json.loads(split_line)
             data = [{'pos': i, 'name': k} for i, k in enumerate(jdic.keys())]
-            for i, k in enumerate(jdic.keys()):
 
-                t = type(jdic[k])
-                if t is int:
+            for i, k in enumerate(jdic.keys()):
+                if isinstance(jdic[k], int):
                     data[i].update({'fmt': 'integer'})
-                if t is float:
+                elif isinstance(jdic[k], float):
                     data[i].update({'fmt': 'real'})
                 else:
                     data[i].update({'fmt': 'text'})
@@ -381,7 +377,6 @@ def add_dash(app):
         ctx = dash.callback_context
         input_id = ctx.triggered[0]["prop_id"].split(".")[0]
         if input_id == f'{APP_ID}_readouts_card_deck':
-            # do we actually get here?
             selected = []
             for card in cards:
                 selected.append(card['id']['index'])
@@ -511,7 +506,7 @@ def add_dash(app):
             if figure_objs is None:
                 figure_objs = []
             else:
-                figure_objs = [fobj for fobj in figure_objs if 'Graph' in str(type(fobj['props']['children']['props']['children']['props']['children']))]
+                figure_objs = [fobj for fobj in figure_objs if f'{APP_ID}_plot_graph' in str(fobj)]
             return figure_objs[:-1]
 
     @app.callback(
