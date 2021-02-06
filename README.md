@@ -41,6 +41,7 @@ data lines example:
 
 In the example, I pinched the 2 hot junction ends and the temperature rose.
 
-![](https://github.com/ohDAQ/public_gifs/blob/main/public_gifs/ohDAQ_usage.gif)
+![](https://github.com/ohDAQ/public_gifs/blob/main/ohDAQ_usage.gif)
+
 
 
