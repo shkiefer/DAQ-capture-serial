@@ -9,8 +9,10 @@ Data is assumed to be streaming over serial and each line is formated in json-li
 # Installation
 clone the repository or download zip file
 ```
-git <repo-url> <directory>
+git https://github.com/ohDAQ/ohDAQ-capture-serial.git <your directory>
 ```
+
+
 
 
 
