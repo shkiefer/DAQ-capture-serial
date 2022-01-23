@@ -1,4 +1,4 @@
-# ohDAQ-capture-serial
+# DAQ-capture-serial
 Python web-app for capturing json-like data over serial.  It is based on [Plotly's Dash](https://plotly.com/dash/) framework for the web UI.
 Data is assumed to be streaming over serial and each line is formated in json-like data:
 
